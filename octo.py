@@ -51,7 +51,10 @@ async def on_ready():
 @tree.command(name="octo", description="Wywołaj Octo!")
 @app_commands.describe(pytanie="Co chcesz powiedzieć?")
 async def octo(interaction: discord.Interaction, pytanie: str):
-    await interaction.response.defer()
+    # Wysyłamy odpowiedź publiczną (ephemeral=False jest domyślne)
+    user_name = interaction.user.nick or interaction.user.name
+    await interaction.response.send_message(f"**{user_name} pyta:** {pytanie}\n\n*Octo myśli...*")
+    
     user_id = interaction.user.id
     
     if user_id not in user_history:
@@ -70,9 +73,10 @@ async def octo(interaction: discord.Interaction, pytanie: str):
             config={"system_instruction": OCTO_PERSONALITY}
         )
         user_history[user_id].append(f"Octo: {response.text}")
-        await interaction.followup.send(f"{interaction.user.mention}, {response.text}")
+        # Edytujemy oryginalną wiadomość, aby zawierała odpowiedź
+        await interaction.edit_original_response(content=f"**{user_name} pyta:** {pytanie}\n\n{response.text}")
     except Exception as e:
-        await interaction.followup.send("Oj, jedna z moich macek się zaplątała! 🐙")
+        await interaction.edit_original_response(content=f"**{user_name} pyta:** {pytanie}\n\nOj, jedna z moich macek się zaplątała! 🐙")
 
 # Komenda /reset
 @tree.command(name="reset", description="Wyczyść pamięć Octo")
