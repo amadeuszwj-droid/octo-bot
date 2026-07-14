@@ -22,6 +22,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.messages = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-3.1-flash-lite"
@@ -43,17 +44,22 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
+    
+    # Historia wiadomości w kanale
     if message.channel.id not in chat_history:
         chat_history[message.channel.id] = []
+    
     chat_history[message.channel.id].append(f"{message.author.name}: {message.content}")
+    
     if len(chat_history[message.channel.id]) > MAX_HISTORY:
         chat_history[message.channel.id].pop(0)
 
     msg_lower = message.content.lower()
     if "octo" in msg_lower or bot.user.mentioned_in(message):
         clean_prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
+        
         kontekst = "\n".join(chat_history[message.channel.id])
-        prompt_z_kontekstem = f"Historia: {kontekst}\n\nPolecenie od {message.author.name}: '{clean_prompt}'"
+        prompt_z_kontekstem = f"Historia rozmowy:\n{kontekst}\n\nPolecenie od {message.author.name}: '{clean_prompt}'"
 
         async with message.channel.typing():
             try:
@@ -64,6 +70,7 @@ async def on_message(message):
                 )
                 await message.reply(response.text)
             except Exception as e:
+                print(f"DEBUG ERROR: {e}")
                 await message.reply("Oj, jedna z moich macek się zaplątała w serwer! 🐙")
 
 if __name__ == "__main__":
