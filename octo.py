@@ -1,14 +1,15 @@
 import os
 import discord
-from discord.ext import commands
+from discord import app_commands
 from google import genai
 from flask import Flask
 from threading import Thread
 
+# Flask do utrzymania Rendera przy życiu
 app = Flask('')
 @app.route('/')
 def home():
-    return "Octo naprawia kable w Rowie Mariańskim!"
+    return "Octo w trybie Slash Commands!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -17,61 +18,48 @@ def keep_alive():
     t = Thread(target=run_flask)
     t.start()
 
+# Konfiguracja
 DISCORD_TOKEN = os.environ.get("OCTO_DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
-
-intents = discord.Intents.default()
-intents.message_content = True
-intents.messages = True
-bot = commands.Bot(command_prefix="!", intents=intents)
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-3.1-flash-lite"
 
-chat_history = {}
-MAX_HISTORY = 5
+intents = discord.Intents.default()
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
 
 OCTO_PERSONALITY = (
     "Jesteś Octo, roztrzepana ośmiorniczka-inżynier głębinowy. Masz 8 macek i zawsze robisz 8 rzeczy naraz. "
     "Jesteś zabawny, głupkowaty i posłuszny. Zawsze zwracaj się do użytkowników po nickach. "
-    "Dopasowuj emotki: 🔨 przy porządku, ❤️ przy wsparciu, 🔧 przy technice."
+    "Zawsze kończ swoje wypowiedzi odpowiednią emotką: "
+    "🔨 jeśli robisz porządek, ❤️ jeśli wspierasz, 🔧 jeśli naprawiasz techniczne problemy, "
+    "🌊 jeśli wykonujesz szaloną akcję (jak rzucanie przedmiotami w kogoś). "
+    "Jeśli użytkownik prosi o akcję wobec kogoś (np. 'rzuć Asię melonem'), "
+    "odpisz z humorem, używając imienia osoby i dopasowanej akcji z emotką 🌊."
 )
 
 @bot.event
 async def on_ready():
-    print(f'Octo wypłynął na wody Discorda!')
+    await tree.sync() # Synchronizacja komend Slash
+    print(f'Octo wypłynął na wody Discorda w trybie Slash!')
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
+# Komenda /octo
+@tree.command(name="octo", description="Wywołaj Octo do akcji!")
+@app_commands.describe(pytanie="Co chcesz powiedzieć lub zrobić?")
+async def octo(interaction: discord.Interaction, pytanie: str):
+    await interaction.response.defer() # Dajemy sobie czas na odpowiedź AI
     
-    # Historia wiadomości w kanale
-    if message.channel.id not in chat_history:
-        chat_history[message.channel.id] = []
-    
-    chat_history[message.channel.id].append(f"{message.author.name}: {message.content}")
-    
-    if len(chat_history[message.channel.id]) > MAX_HISTORY:
-        chat_history[message.channel.id].pop(0)
-
-    msg_lower = message.content.lower()
-    if "octo" in msg_lower or bot.user.mentioned_in(message):
-        clean_prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
-        
-        kontekst = "\n".join(chat_history[message.channel.id])
-        prompt_z_kontekstem = f"Historia rozmowy:\n{kontekst}\n\nPolecenie od {message.author.name}: '{clean_prompt}'"
-
-        async with message.channel.typing():
-            try:
-                response = ai_client.models.generate_content(
-                    model=MODEL_NAME,
-                    contents=prompt_z_kontekstem,
-                    config={"system_instruction": OCTO_PERSONALITY}
-                )
-                await message.reply(response.text)
-            except Exception as e:
-                print(f"DEBUG ERROR: {e}")
-                await message.reply("Oj, jedna z moich macek się zaplątała w serwer! 🐙")
+    try:
+        # AI generuje odpowiedź na podstawie Twojego pytania
+        response = ai_client.models.generate_content(
+            model=MODEL_NAME,
+            contents=f"Użytkownik {interaction.user.name} mówi: {pytanie}",
+            config={"system_instruction": OCTO_PERSONALITY}
+        )
+        await interaction.followup.send(f"{interaction.user.mention}, {response.text}")
+    except Exception as e:
+        print(f"BŁĄD: {e}")
+        await interaction.followup.send("Oj, jedna z moich macek się zaplątała w serwer! 🐙")
 
 if __name__ == "__main__":
     keep_alive() 
