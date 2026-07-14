@@ -5,11 +5,11 @@ from google import genai
 from flask import Flask
 from threading import Thread
 
-# Flask do utrzymania Rendera przy życiu
+# Flask dla Rendera
 app = Flask('')
 @app.route('/')
 def home():
-    return "Octo w trybie Slash Commands!"
+    return "Octo z pamięcią i funkcją resetu!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -24,6 +24,10 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-3.1-flash-lite"
 
+# Pamięć w RAM
+user_history = {} 
+MAX_HISTORY = 5
+
 intents = discord.Intents.default()
 bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
@@ -34,31 +38,49 @@ OCTO_PERSONALITY = (
     "Twoją główną zasadą jest używanie emotek w sposób kreatywny i dynamiczny – nie ograniczaj się do jednego zestawu! "
     "Dobieraj emotki tak, aby pasowały do kontekstu Twojej odpowiedzi, emocji i akcji, które wykonujesz (np. 🍉 gdy wspominasz o melonach, 💥 przy akcjach siłowych, 🐙 gdy wspominasz o sobie, 🐚 przy głębinach). "
     "Im więcej macek (emotek) zaangażujesz w przekaz, tym lepiej. "
-    "Jeśli użytkownik prosi o akcję wobec kogoś, wykonaj ją z entuzjazmem, humorem i dużą ilością dopasowanych emotek."
+    "Jeśli użytkownik prosi o akcję wobec kogoś, wykonaj ją z entuzjazmem, humorem i dużą ilością dopasowanych emotek. "
+    "Pamiętaj o historii rozmowy, którą otrzymujesz w każdej wiadomości, aby zachować ciągłość konwersacji."
 )
 
 @bot.event
 async def on_ready():
-    await tree.sync() # Synchronizacja komend Slash
-    print(f'Octo wypłynął na wody Discorda w trybie Slash!')
+    await tree.sync()
+    print(f'Octo działa z pamięcią i komendą /reset!')
 
 # Komenda /octo
-@tree.command(name="octo", description="Wywołaj Octo do akcji!")
-@app_commands.describe(pytanie="Co chcesz powiedzieć lub zrobić?")
+@tree.command(name="octo", description="Wywołaj Octo!")
+@app_commands.describe(pytanie="Co chcesz powiedzieć?")
 async def octo(interaction: discord.Interaction, pytanie: str):
-    await interaction.response.defer() # Dajemy sobie czas na odpowiedź AI
+    await interaction.response.defer()
+    user_id = interaction.user.id
+    
+    if user_id not in user_history:
+        user_history[user_id] = []
+    
+    user_history[user_id].append(f"Ty: {pytanie}")
+    if len(user_history[user_id]) > MAX_HISTORY:
+        user_history[user_id].pop(0)
+    
+    kontekst = "\n".join(user_history[user_id])
     
     try:
-        # AI generuje odpowiedź na podstawie Twojego pytania
         response = ai_client.models.generate_content(
             model=MODEL_NAME,
-            contents=f"Użytkownik {interaction.user.name} mówi: {pytanie}",
+            contents=f"Historia ostatnich komend:\n{kontekst}\n\nOdpowiedz na: {pytanie}",
             config={"system_instruction": OCTO_PERSONALITY}
         )
+        user_history[user_id].append(f"Octo: {response.text}")
         await interaction.followup.send(f"{interaction.user.mention}, {response.text}")
     except Exception as e:
-        print(f"BŁĄD: {e}")
-        await interaction.followup.send("Oj, jedna z moich macek się zaplątała w serwer! 🐙")
+        await interaction.followup.send("Oj, jedna z moich macek się zaplątała! 🐙")
+
+# Komenda /reset
+@tree.command(name="reset", description="Wyczyść pamięć Octo")
+async def reset(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    if user_id in user_history:
+        user_history[user_id] = []
+    await interaction.response.send_message("Pamięć wyczyszczona! Wracamy do punktu wyjścia. 🐙🧽")
 
 if __name__ == "__main__":
     keep_alive() 
