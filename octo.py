@@ -1,6 +1,7 @@
 import os
 import discord
 from discord import app_commands
+from discord.ext import commands # Dodane
 from google import genai
 from flask import Flask
 from threading import Thread
@@ -29,8 +30,8 @@ user_history = {}
 MAX_HISTORY = 5
 
 intents = discord.Intents.default()
-bot = discord.Client(intents=intents)
-tree = app_commands.CommandTree(bot)
+# Zmiana z discord.Client na commands.Bot - kluczowe dla poprawnych komend
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 OCTO_PERSONALITY = (
     "Jesteś Octo, kompletnie nieogarnięta i durnowata ośmiornica. "
@@ -45,19 +46,18 @@ OCTO_PERSONALITY = (
 
 @bot.event
 async def on_ready():
-    await tree.sync()
-    print(f'Octo działa z pamięcią i komendą /reset!')
+    # Zsynchronizowano globalnie bez podawania guild - to sprawi, że komendy będą w DM
+    await bot.tree.sync() 
+    print(f'Octo działa globalnie z pamięcią i komendą /reset!')
 
 # Komenda /octo
-@tree.command(name="octo", description="Wywołaj Octo!")
+@bot.tree.command(name="octo", description="Wywołaj Octo!")
 @app_commands.describe(pytanie="Co chcesz powiedzieć?")
 async def octo(interaction: discord.Interaction, pytanie: str):
-    # Wysyłamy odpowiedź publiczną (ephemeral=False jest domyślne)
     user_name = interaction.user.nick or interaction.user.name
     await interaction.response.send_message(f"**{user_name} pyta:** {pytanie}\n\n*Octo myśli...*")
     
     user_id = interaction.user.id
-    
     if user_id not in user_history:
         user_history[user_id] = []
     
@@ -74,13 +74,12 @@ async def octo(interaction: discord.Interaction, pytanie: str):
             config={"system_instruction": OCTO_PERSONALITY}
         )
         user_history[user_id].append(f"Octo: {response.text}")
-        # Edytujemy oryginalną wiadomość, aby zawierała odpowiedź
         await interaction.edit_original_response(content=f"**{user_name} pyta:** {pytanie}\n\n{response.text}")
     except Exception as e:
         await interaction.edit_original_response(content=f"**{user_name} pyta:** {pytanie}\n\nOj, jedna z moich macek się zaplątała! 🐙")
 
 # Komenda /reset
-@tree.command(name="reset", description="Wyczyść pamięć Octo")
+@bot.tree.command(name="reset", description="Wyczyść pamięć Octo")
 async def reset(interaction: discord.Interaction):
     user_id = interaction.user.id
     if user_id in user_history:
