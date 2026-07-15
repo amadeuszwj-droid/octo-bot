@@ -5,6 +5,7 @@ from discord.ext import commands
 from google import genai
 from flask import Flask
 from threading import Thread
+import traceback
 
 # Flask dla utrzymania serwera na Renderze
 app = Flask('')
@@ -23,9 +24,8 @@ def keep_alive():
 DISCORD_TOKEN = os.environ.get("OCTO_DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-1.5-flash" # Upewnij się, że ten model jest obsługiwany w Twoim regionie
+MODEL_NAME = "gemini-1.5-flash"
 
-# Pamięć w RAM
 user_history = {} 
 MAX_HISTORY = 5
 
@@ -41,7 +41,7 @@ OCTO_PERSONALITY = (
     "ZAKAZ używania wielkich liter na początku zdań. "
     "ZAKAZ bycia uprzejmym i agresywnym. Bądź neutralny, ale głupkowaty "
     "ZAKAZ używania imienia użytkownika. "
-    "Używaj ZAWSZE różnych, losowych emotek, nigdy nie powtarzaj tej samej przy jednej wiadomości. maksymalnie 1 lub 2 emotki pasujące do kontekstu "
+    "Używaj ZAWSZE różnych, losowych emotek, pasujących do kontekstu, nigdy nie powtarzaj tej samej przy jednej wiadomości. maksymalnie 1 lub 2 emotki pasujące do kontekstu "
 )
 
 @bot.event
@@ -57,10 +57,10 @@ async def on_ready():
 @bot.tree.command(name="octo", description="Wywołaj Octo!")
 @app_commands.describe(pytanie="Co chcesz powiedzieć?")
 async def octo(interaction: discord.Interaction, pytanie: str):
-    # Pobranie nazwy użytkownika (obsługa DM)
+    # Pobranie nazwy użytkownika (bezpieczna wersja dla wiadomości prywatnych DM)
     user_name = interaction.user.global_name or interaction.user.name
     
-    # Używamy defer, aby uniknąć błędu "Interakcja nie powiodła się" podczas myślenia AI
+    # Używamy defer, aby uniknąć błędu "Interakcja nie powiodła się" podczas oczekiwania na Gemini
     await interaction.response.defer()
     
     user_id = interaction.user.id
@@ -74,23 +74,28 @@ async def octo(interaction: discord.Interaction, pytanie: str):
     kontekst = "\n".join(user_history[user_id])
     
     try:
+        # Poprawiona składnia przesyłania treści (contents jako lista)
         response = ai_client.models.generate_content(
             model=MODEL_NAME,
-            contents=f"Historia ostatnich komend:\n{kontekst}\n\nOdpowiedz na: {pytanie}",
+            contents=[f"Historia:\n{kontekst}\n\nOdpowiedz na: {pytanie}"],
             config={"system_instruction": OCTO_PERSONALITY}
         )
-        user_history[user_id].append(f"Octo: {response.text}")
-        await interaction.followup.send(f"**{user_name} pyta:** {pytanie}\n\n{response.text}")
+        octo_text = response.text
+        user_history[user_id].append(f"Octo: {octo_text}")
+        
+        # Wyświetlanie Twojego pytania i odpowiedzi bota
+        await interaction.followup.send(f"**Ty:** {pytanie}\n\n{octo_text}")
     except Exception as e:
-        await interaction.followup.send(f"Oj, jedna z moich macek się zaplątała! 🐙")
+        # Dokładny log błędu w konsoli Rendera, abyśmy od razu wiedzieli co jest nie tak
+        print(f"DEBUG ERROR: {traceback.format_exc()}")
+        await interaction.followup.send("coś zjadło moje macki i nie mogę odpisać 🐙")
 
 # Komenda /reset
 @bot.tree.command(name="reset", description="Wyczyść pamięć Octo")
 async def reset(interaction: discord.Interaction):
     user_id = interaction.user.id
-    if user_id in user_history:
-        user_history[user_id] = []
-    await interaction.response.send_message("Pamięć wyczyszczona! Wracamy do punktu wyjścia. 🐙🧽")
+    user_history[user_id] = []
+    await interaction.response.send_message("pamięć wyczyszczona. wracamy do punktu wyjścia 🐙🧽")
 
 if __name__ == "__main__":
     keep_alive() 
