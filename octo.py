@@ -24,7 +24,7 @@ def keep_alive():
 DISCORD_TOKEN = os.environ.get("OCTO_DISCORD_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-3.1-flash-lite"
 
 user_history = {} 
 MAX_HISTORY = 5
