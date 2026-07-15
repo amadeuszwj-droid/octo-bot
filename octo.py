@@ -32,35 +32,35 @@ MAX_HISTORY = 5
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# POPRAWIONA OSOBOWOŚĆ: Głupio, ale bezpośrednio na temat!
 OCTO_PERSONALITY = (
     "Jesteś Octo, kompletnie nieogarnięta, niesforna i durnowata ośmiornica. "
     "Działasz chaotycznie, czasem używasz macek w sposób kompletnie bez sensu. "
-    "Zasada: zawsze pisz 2 proste, urywane bardzo krótkie zdania. Pierwsze to Twoje głupie przemyślenie, drugie to niezdarna akcja ośmiornicy. "
+    "KLUCZOWE: Zawsze odpowiadaj bezpośrednio na pytanie użytkownika, ale zrób to w głupi, upośledzony i durny sposób. Nie ignoruj tematu rozmowy. "
+    "Zasada: zawsze pisz dokładnie 2 proste, bardzo krótkie zdania. Pierwsze to Twoje durne przemyślenie na temat pytania, drugie to niezdarna akcja ośmiornicy. "
     "Zdarza się, że odpowiesz tylko jednym zdaniem. "
-    "Bądź durny i nieświadomy swojej głupoty. Reaguj niezdarnie. Piszesz z perspektywy ośmiornicy, która wszystko rozumie źle. "
+    "Bądź durny i nieświadomy swojej głupoty. Reaguj niezdarnie. "
     "ZAKAZ używania wielkich liter na początku zdań. "
-    "ZAKAZ bycia uprzejmym i agresywnym. Bądź neutralny, ale głupkowaty "
+    "ZAKAZ bycia pomocnym, uprzejmym i agresywnym. Bądź neutralny, ale głupkowaty. "
     "ZAKAZ używania imienia użytkownika. "
-    "Używaj ZAWSZE różnych, losowych emotek, pasujących do kontekstu, nigdy nie powtarzaj tej samej przy jednej wiadomości. maksymalnie 1 lub 2 emotki pasujące do kontekstu "
+    "Używaj ZAWSZE różnych, losowych emotek, pasujących do kontekstu, nigdy nie powtarzaj tej samej przy jednej wiadomości. maksymalnie 1 lub 2 emotki pasujące do kontekstu. "
 )
 
 @bot.event
 async def on_ready():
-    # Synchronizacja komend globalnie dla instalacji użytkownika
     try:
         synced = await bot.tree.sync()
         print(f'Octo działa! Zsynchronizowano {len(synced)} komend globalnie.')
     except Exception as e:
         print(f'Błąd synchronizacji: {e}')
 
-# Komenda /octo
+# Komenda /octo - DODANE ZEZWOLENIA NA DM I USER INSTALL!
 @bot.tree.command(name="octo", description="Wywołaj Octo!")
+@app_commands.allowed_installs(guilds=True, users=True)  # Pozwala na instalację globalną na koncie
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)  # Odblokowuje komendę w DM z innymi ludźmi!
 @app_commands.describe(pytanie="Co chcesz powiedzieć?")
 async def octo(interaction: discord.Interaction, pytanie: str):
-    # Pobranie nazwy użytkownika (bezpieczna wersja dla wiadomości prywatnych DM)
     user_name = interaction.user.global_name or interaction.user.name
-    
-    # Używamy defer, aby uniknąć błędu "Interakcja nie powiodła się" podczas oczekiwania na Gemini
     await interaction.response.defer()
     
     user_id = interaction.user.id
@@ -74,7 +74,6 @@ async def octo(interaction: discord.Interaction, pytanie: str):
     kontekst = "\n".join(user_history[user_id])
     
     try:
-        # Poprawiona składnia przesyłania treści (contents jako lista)
         response = ai_client.models.generate_content(
             model=MODEL_NAME,
             contents=[f"Historia:\n{kontekst}\n\nOdpowiedz na: {pytanie}"],
@@ -83,15 +82,15 @@ async def octo(interaction: discord.Interaction, pytanie: str):
         octo_text = response.text
         user_history[user_id].append(f"Octo: {octo_text}")
         
-        # Wyświetlanie Twojego pytania i odpowiedzi bota
         await interaction.followup.send(f"**Ty:** {pytanie}\n\n{octo_text}")
     except Exception as e:
-        # Dokładny log błędu w konsoli Rendera, abyśmy od razu wiedzieli co jest nie tak
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         await interaction.followup.send("coś zjadło moje macki i nie mogę odpisać 🐙")
 
-# Komenda /reset
+# Komenda /reset - DODANE ZEZWOLENIA NA DM I USER INSTALL!
 @bot.tree.command(name="reset", description="Wyczyść pamięć Octo")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def reset(interaction: discord.Interaction):
     user_id = interaction.user.id
     user_history[user_id] = []
