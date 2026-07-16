@@ -26,13 +26,15 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-3.1-flash-lite"
 
-user_history = {} 
-MAX_HISTORY = 5
+# Słownik na historię kanałów (zamiast historii tylko komend użytkownika)
+chat_history = {} 
+MAX_HISTORY = 3  # Zmieniono z 5 na 3
 
 intents = discord.Intents.default()
+intents.message_content = True  # Wymagane, aby bot widział treść zwykłych wiadomości do kontekstu
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# POPRAWIONA OSOBOWOŚĆ: Głupio, ale bezpośrednio na temat!
+# OSOBOWOŚĆ (NIETYKALNA)
 OCTO_PERSONALITY = (
     "Jesteś Octo, kompletnie nieogarnięta, niesforna i durnowata ośmiornica. "
     "Działasz chaotycznie, czasem używasz macek w sposób kompletnie bez sensu. "
@@ -54,47 +56,73 @@ async def on_ready():
     except Exception as e:
         print(f'Błąd synchronizacji: {e}')
 
-# Komenda /octo - DODANE ZEZWOLENIA NA DM I USER INSTALL!
+# Zbieranie kontekstu z czatu (tak jak u Piko)
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    # Zapisujemy historię dla danego kanału
+    if message.channel.id not in chat_history:
+        chat_history[message.channel.id] = []
+    
+    chat_history[message.channel.id].append(f"{message.author.name}: {message.content}")
+    if len(chat_history[message.channel.id]) > MAX_HISTORY:
+        chat_history[message.channel.id].pop(0)
+
+    # Przetwarzaj komendy prefiksowe (jeśli jakieś istnieją)
+    await bot.process_commands(message)
+
+# Komenda /octo - Z PEŁNYM KONTEKSTEM CZATU
 @bot.tree.command(name="octo", description="Wywołaj Octo!")
-@app_commands.allowed_installs(guilds=True, users=True)  # Pozwala na instalację globalną na koncie
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)  # Odblokowuje komendę w DM z innymi ludźmi!
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.describe(pytanie="Co chcesz powiedzieć?")
 async def octo(interaction: discord.Interaction, pytanie: str):
-    user_name = interaction.user.global_name or interaction.user.name
     await interaction.response.defer()
     
-    user_id = interaction.user.id
-    if user_id not in user_history:
-        user_history[user_id] = []
+    channel_id = interaction.channel_id
     
-    user_history[user_id].append(f"Ty: {pytanie}")
-    if len(user_history[user_id]) > MAX_HISTORY:
-        user_history[user_id].pop(0)
+    # Pobieramy kontekst z tego kanału (jeśli istnieje)
+    if channel_id in chat_history and chat_history[channel_id]:
+        kontekst = "\n".join(chat_history[channel_id])
+    else:
+        kontekst = "Brak wcześniejszych wiadomości."
     
-    kontekst = "\n".join(user_history[user_id])
+    prompt_z_kontekstem = (
+        f"Oto ostatnie wiadomości z kanału (kontekst):\n{kontekst}\n\n"
+        f"Użytkownik zadał pytanie: '{pytanie}'.\n"
+        f"BARDZO WAŻNE: Odnieś się w swojej durnej odpowiedzi do tego, o czym była mowa w kontekście powyżej!"
+    )
     
     try:
         response = ai_client.models.generate_content(
             model=MODEL_NAME,
-            contents=[f"Historia:\n{kontekst}\n\nOdpowiedz na: {pytanie}"],
+            contents=[prompt_z_kontekstem],
             config={"system_instruction": OCTO_PERSONALITY}
         )
         octo_text = response.text
-        user_history[user_id].append(f"Octo: {octo_text}")
+        
+        # Dodajemy odpowiedź bota do historii kanału
+        if channel_id not in chat_history:
+            chat_history[channel_id] = []
+        chat_history[channel_id].append(f"Octo: {octo_text}")
+        if len(chat_history[channel_id]) > MAX_HISTORY:
+            chat_history[channel_id].pop(0)
         
         await interaction.followup.send(f"**Ty:** {pytanie}\n\n{octo_text}")
     except Exception as e:
         print(f"DEBUG ERROR: {traceback.format_exc()}")
         await interaction.followup.send("coś zjadło moje macki i nie mogę odpisać 🐙")
 
-# Komenda /reset - DODANE ZEZWOLENIA NA DM I USER INSTALL!
-@bot.tree.command(name="reset", description="Wyczyść pamięć Octo")
+# Komenda /reset - czyści historię danego kanału
+@bot.tree.command(name="reset", description="Wyczyść pamięć Octo na tym kanale")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def reset(interaction: discord.Interaction):
-    user_id = interaction.user.id
-    user_history[user_id] = []
-    await interaction.response.send_message("pamięć wyczyszczona. wracamy do punktu wyjścia 🐙🧽")
+    channel_id = interaction.channel_id
+    chat_history[channel_id] = []
+    await interaction.response.send_message("pamięć wyczyszczona na tym kanale. wracamy do punktu wyjścia 🐙🧽")
 
 if __name__ == "__main__":
     keep_alive() 
