@@ -3,22 +3,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from google import genai
-from flask import Flask
-from threading import Thread
 import traceback
-
-# Flask dla utrzymania serwera na Renderze
-app = Flask('')
-@app.route('/')
-def home():
-    return "Octo żyje i działa!"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run_flask)
-    t.start()
 
 # Konfiguracja
 DISCORD_TOKEN = os.environ.get("OCTO_DISCORD_TOKEN")
@@ -182,5 +167,4 @@ async def reset(interaction: discord.Interaction):
     await interaction.response.send_message("pamięć wyczyszczona na tym kanale. wracamy do punktu wyjścia 🐙🧽")
 
 if __name__ == "__main__":
-    keep_alive() 
     bot.run(DISCORD_TOKEN)
